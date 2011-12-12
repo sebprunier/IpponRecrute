@@ -1,8 +1,11 @@
 package fr.ippon.rh.support;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.RecursiveAction;
 
+import org.jasypt.exceptions.EncryptionOperationNotPossibleException;
 import org.jasypt.util.text.BasicTextEncryptor;
 
 /**
@@ -20,12 +23,23 @@ public class ForceBrute {
      */
     public static void main(String args[]) {
 
-        Set<String> passwords = new HashSet<String>();
+        System.out.println("Available processors : " + Runtime.getRuntime().availableProcessors());
+        long startTime = System.currentTimeMillis();
+
+        // Init password list
+        List<String> passwords = new ArrayList<String>();
         permute("", "ABCDEGHIJ", passwords);
+        System.out.println("Number of passwords : " + passwords.size());
 
-        System.out.println(passwords.size());
+        // Search passwork with fork/join framework !
+        ForkJoinPool pool = new ForkJoinPool();
+        PasswordVerifier pv = new PasswordVerifier(passwords);
+        pool.invoke(pv);
 
-        System.out.println(getPassword(passwords));
+        // Print execution time
+        long executionTime = System.currentTimeMillis() - startTime;
+        System.out.println("Execution time : " + executionTime);
+
     }
 
     /**
@@ -38,7 +52,7 @@ public class ForceBrute {
      * @param passwords
      *            ensemble des mots de passe.
      */
-    public static void permute(String sStart, String sEnd, Set<String> passwords) {
+    public static void permute(String sStart, String sEnd, List<String> passwords) {
         if (sEnd.length() <= 1) {
             passwords.add(sStart + sEnd);
         } else {
@@ -50,26 +64,46 @@ public class ForceBrute {
     }
 
     /**
-     * Recherche le bon mot de passe parmi les permutations possibles.
+     * Recursive action for password checking.
      * 
-     * @param passwords
-     *            les permutations.
-     * @return le bon mot de passe, ou <code>null</code> si aucun bon mot de passe.
+     * @author sebastien.prunier
      */
-    public static String getPassword(Set<String> passwords) {
-        for (String password : passwords) {
-            try {
-                BasicTextEncryptor textEncryptor = new BasicTextEncryptor();
-                textEncryptor.setPassword(password);
-                String decryptedText = textEncryptor.decrypt(etape4Texte);
-                if (decryptedText.contains("ippon")) {
-                    return password;
+    public static final class PasswordVerifier extends RecursiveAction {
+
+        private static final long serialVersionUID = -5314203852900283168L;
+
+        private static boolean done = false;
+        private List<String> passwords;
+
+        public PasswordVerifier(List<String> passwords) {
+            this.passwords = passwords;
+        }
+
+        @Override
+        protected void compute() {
+            if (!done) {
+                int passwordsSize = passwords.size();
+                if (passwordsSize == 1) {
+                    String password = passwords.get(0);
+                    try {
+                        BasicTextEncryptor textEncryptor = new BasicTextEncryptor();
+                        textEncryptor.setPassword(password);
+                        String decryptedText = textEncryptor.decrypt(etape4Texte);
+                        if (decryptedText.contains("ippon")) {
+                            System.out.println("Solution : " + password);
+                            done = true;
+                        }
+                    } catch (EncryptionOperationNotPossibleException e) {
+                        // Bad password !
+                    }
+                } else {
+                    PasswordVerifier pv1 = new PasswordVerifier(passwords.subList(0, passwordsSize / 2));
+                    PasswordVerifier pv2 = new PasswordVerifier(passwords.subList(passwordsSize / 2, passwordsSize));
+
+                    invokeAll(pv1, pv2);
                 }
-            } catch (Exception e) {
-                // Bad password !
             }
         }
-        return null; // No valid password :-(
     }
 
 }
