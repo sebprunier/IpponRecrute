@@ -84,7 +84,7 @@ public class ForceBrute {
             if (!done) {
                 int passwordsSize = passwords.size();
                 if (passwordsSize == 1) {
-                    String password = passwords.get(0);
+                    String password = (String) passwords.toArray()[0];
                     try {
                         BasicTextEncryptor textEncryptor = new BasicTextEncryptor();
                         textEncryptor.setPassword(password);
@@ -105,5 +105,4 @@ public class ForceBrute {
             }
         }
     }
-
 }
