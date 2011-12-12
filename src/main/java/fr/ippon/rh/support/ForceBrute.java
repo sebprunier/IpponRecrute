@@ -5,8 +5,12 @@ import java.util.List;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
 
+import javax.enterprise.event.Observes;
+
 import org.jasypt.exceptions.EncryptionOperationNotPossibleException;
 import org.jasypt.util.text.BasicTextEncryptor;
+import org.jboss.weld.environment.se.Weld;
+import org.jboss.weld.environment.se.WeldContainer;
 
 /**
  * Resolution de l'etape 3 par force brute.
@@ -26,14 +30,17 @@ public class ForceBrute {
         System.out.println("Available processors : " + Runtime.getRuntime().availableProcessors());
         long startTime = System.currentTimeMillis();
 
+        // Create Weld container
+        WeldContainer weld = new Weld().initialize();
+
         // Init password list
         List<String> passwords = new ArrayList<String>();
         permute("", "ABCDEGHIJ", passwords);
         System.out.println("Number of passwords : " + passwords.size());
 
         // Search passwork with fork/join framework !
-        ForkJoinPool pool = new ForkJoinPool();
-        PasswordVerifier pv = new PasswordVerifier(passwords);
+        ForkJoinPool pool = new MyCustomForkJoinPool();
+        PasswordVerifier pv = new PasswordVerifier(passwords, weld);
         pool.invoke(pv);
 
         // Print execution time
@@ -72,37 +79,77 @@ public class ForceBrute {
 
         private static final long serialVersionUID = -5314203852900283168L;
 
-        private static boolean done = false;
         private List<String> passwords;
 
-        public PasswordVerifier(List<String> passwords) {
+        // Weld container
+        private WeldContainer weld;
+
+        public PasswordVerifier(List<String> passwords, WeldContainer weld) {
             this.passwords = passwords;
+            this.weld = weld;
         }
 
         @Override
         protected void compute() {
-            if (!done) {
-                int passwordsSize = passwords.size();
-                if (passwordsSize == 1) {
-                    String password = (String) passwords.toArray()[0];
-                    try {
-                        BasicTextEncryptor textEncryptor = new BasicTextEncryptor();
-                        textEncryptor.setPassword(password);
-                        String decryptedText = textEncryptor.decrypt(etape4Texte);
-                        if (decryptedText.contains("ippon")) {
-                            System.out.println("Solution : " + password);
-                            done = true;
-                        }
-                    } catch (EncryptionOperationNotPossibleException e) {
-                        // Bad password !
+            int passwordsSize = passwords.size();
+            if (passwordsSize == 1) {
+                String password = (String) passwords.toArray()[0];
+                try {
+                    BasicTextEncryptor textEncryptor = new BasicTextEncryptor();
+                    textEncryptor.setPassword(password);
+                    String decryptedText = textEncryptor.decrypt(etape4Texte);
+                    if (decryptedText.contains("ippon")) {
+                        // Fire event !
+                        weld.event().select(PasswordFoundEvent.class).fire(new PasswordFoundEvent(password));
                     }
-                } else {
-                    PasswordVerifier pv1 = new PasswordVerifier(passwords.subList(0, passwordsSize / 2));
-                    PasswordVerifier pv2 = new PasswordVerifier(passwords.subList(passwordsSize / 2, passwordsSize));
-
-                    invokeAll(pv1, pv2);
+                } catch (EncryptionOperationNotPossibleException e) {
+                    // Bad password !
                 }
+            } else {
+                PasswordVerifier pv1 = new PasswordVerifier(passwords.subList(0, passwordsSize / 2), weld);
+                PasswordVerifier pv2 = new PasswordVerifier(passwords.subList(passwordsSize / 2, passwordsSize), weld);
+
+                invokeAll(pv1, pv2);
             }
         }
+    }
+
+    /**
+     * Custom pool for catching 'PasswordFoundEvent' and stopping threads.
+     * 
+     * @author sebastien.prunier
+     */
+    public static final class MyCustomForkJoinPool extends ForkJoinPool {
+
+        /**
+         * Listens to 'PasswordFoundEvent'
+         * 
+         * @param event
+         *            the fired event.
+         */
+        public void onPasswordFoundEvent(@Observes PasswordFoundEvent event) {
+            System.out.println("Password found ! This is : " + event.getPassword());
+            this.shutdownNow();
+        }
+
+    }
+
+    /**
+     * Event fired when the password is found.
+     * 
+     * @author sebastien.prunier
+     */
+    public static final class PasswordFoundEvent {
+
+        private String password;
+
+        public PasswordFoundEvent(String password) {
+            this.password = password;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
     }
 }
