@@ -100,7 +100,7 @@ public class ForceBrute {
                     PasswordVerifier pv1 = new PasswordVerifier(passwords.subList(0, passwordsSize / 2));
                     PasswordVerifier pv2 = new PasswordVerifier(passwords.subList(passwordsSize / 2, passwordsSize));
 
-                    invokeAll(pv1, pv2);
+                    invokeAll(pv2, pv1);
                 }
             }
         }
