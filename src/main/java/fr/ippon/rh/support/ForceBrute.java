@@ -6,6 +6,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
 
 import javax.enterprise.event.Observes;
+import javax.inject.Singleton;
 
 import org.jasypt.exceptions.EncryptionOperationNotPossibleException;
 import org.jasypt.util.text.BasicTextEncryptor;
@@ -38,8 +39,10 @@ public class ForceBrute {
         permute("", "ABCDEGHIJ", passwords);
         System.out.println("Number of passwords : " + passwords.size());
 
-        // Search passwork with fork/join framework !
-        ForkJoinPool pool = new MyCustomForkJoinPool();
+        // Create ForkJoinPool via Weld
+        ForkJoinPool pool = weld.instance().select(MyCustomForkJoinPool.class).get();
+
+        // Search password with fork/join framework !
         PasswordVerifier pv = new PasswordVerifier(passwords, weld);
         pool.invoke(pv);
 
@@ -119,6 +122,7 @@ public class ForceBrute {
      * 
      * @author sebastien.prunier
      */
+    @Singleton
     public static final class MyCustomForkJoinPool extends ForkJoinPool {
 
         /**
